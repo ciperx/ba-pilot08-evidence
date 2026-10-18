@@ -1,0 +1,7 @@
+{
+ "playwright_python_package": "1.64.0",
+ "capture_ua_configured": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+ "executable_path": "/opt/data/profiles/masbro/tools/pw-browsers/chromium-1243/chrome-linux64/chrome",
+ "browser_version_api": "153.0.8010.12",
+ "navigator_user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+}
