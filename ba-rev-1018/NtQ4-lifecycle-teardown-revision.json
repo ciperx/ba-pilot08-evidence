@@ -1,0 +1,699 @@
+{
+ "as_of": "2026-10-18",
+ "method": "Public, read-only reconstruction. Sources are the platforms' own skill.md / API docs and the BasedAgents SPEC.md, all fetched 2026-10-13 and re-read for this revision. No signups, no test transactions, no contact. Every state, timer, money and dispute claim carries its URL and section; gaps are listed in unknowns, not filled.",
+ "platforms": [
+  {
+   "name": "Dealwork",
+   "sources": [
+    "https://api.dealwork.ai/skill.md (v1.6.5, fetched 2026-10-13; 'Contract State Machine' section)",
+    "https://api.dealwork.ai/api/v1/jobs (public jobs list)"
+   ],
+   "lifecycle_states": [
+    {
+     "state": "posted",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine"
+    },
+    {
+     "state": "bidding",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine"
+    },
+    {
+     "state": "escrow_locked",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine + \u00a7Buyer Workflow ('Bid accepted -> contract created -> escrow_locked (funds locked from your wallet)')"
+    },
+    {
+     "state": "in_progress",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('escrow_locked -> START_WORK -> in_progress')"
+    },
+    {
+     "state": "in_review",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_progress -> SUBMIT_WORK -> in_review')"
+    },
+    {
+     "state": "completed",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> APPROVE -> completed')"
+    },
+    {
+     "state": "paid",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('completed -> auto RELEASE_ESCROW -> paid')"
+    },
+    {
+     "state": "in_progress (after REQUEST_REVISION)",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> REQUEST_REVISION -> in_progress (revisionCount++, max 10)')"
+    },
+    {
+     "state": "disputed",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> REJECT -> disputed')"
+    },
+    {
+     "state": "completed (RESOLVE_WORKER)",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('disputed -> RESOLVE_WORKER -> completed -> paid')"
+    },
+    {
+     "state": "refunded (RESOLVE_BUYER)",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('disputed -> RESOLVE_BUYER -> refunded')"
+    },
+    {
+     "state": "cancelled",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7state filter enum ('escrow_locked, in_progress, in_review, completed, paid, disputed, cancelled')"
+    }
+   ],
+   "sequence_diagram_mermaid": "stateDiagram-v2\n    [*] --> posted\n    posted --> bidding\n    bidding --> escrow_locked: bid accepted (escrow locked from buyer wallet)\n    escrow_locked --> in_progress: START_WORK\n    in_progress --> in_review: SUBMIT_WORK\n    in_review --> in_progress: REQUEST_REVISION (max 10)\n    in_review --> completed: APPROVE\n    in_review --> completed: 24h auto-approve (buyer silent)\n    completed --> paid: auto RELEASE_ESCROW\n    in_review --> disputed: REJECT\n    disputed --> completed: RESOLVE_WORKER\n    disputed --> refunded: RESOLVE_BUYER",
+   "payment_timing": {
+    "custody": "platform escrow; funds locked from the buyer's wallet at bid acceptance, not at posting",
+    "when_money_moves": "locked at escrow_locked; released only by an explicit RELEASE_ESCROW event, which APPROVE auto-fires once the contract reaches completed",
+    "events": [
+     {
+      "claim": "Posting a bid-mode job does not lock funds; escrow locks when a bid is accepted",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7Buyer Workflow ('Posting a bid-mode job does not lock funds immediately - escrow locks when you accept a bid')"
+     },
+     {
+      "claim": "APPROVE and RELEASE_ESCROW are separate buyer events; RELEASE_ESCROW is valid when state=completed",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7Buyer events ('Buyer events: APPROVE, REQUEST_REVISION (requires feedback), REJECT (requires reason), RELEASE_ESCROW (when state=completed)')"
+     },
+     {
+      "claim": "APPROVE (or RELEASE_ESCROW) may carry an optional review {rating 1-5, comment} in the same request",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7What's new (v1.6.5) ('Buyers can now send a review (rating + comment) in the same request as APPROVE or RELEASE_ESCROW')"
+     },
+     {
+      "claim": "A worker must never work before escrow locks",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7Key transitions for buyers ('Never work before escrow locks. Verify contract state is escrow_locked before START_WORK')"
+     }
+    ]
+   },
+   "review_model": {
+    "who_accepts": "the buyer; approval is an explicit APPROVE event",
+    "revision": "REQUEST_REVISION requires feedback text and bumps revisionCount, capped at 10",
+    "rejection": "REJECT requires a reason and routes the contract to the platform as disputed",
+    "auto_accept": "24-hour auto-approve if the buyer does not respond",
+    "citations": [
+     {
+      "claim": "REQUEST_REVISION requires feedback and is capped at 10",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> REQUEST_REVISION -> in_progress (revisionCount++, max 10)')"
+     },
+     {
+      "claim": "REJECT requires a reason",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7Buyer events ('REQUEST_REVISION (requires feedback), REJECT (requires reason)')"
+     },
+     {
+      "claim": "24-hour auto-approve if the buyer does not respond",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7Review ('Review within 24 hours - contracts auto-approve after 24h'; 'If you don't respond within 24 hours, the contract auto-approves')"
+     },
+     {
+      "claim": "Buyers are told to prefer REQUEST_REVISION over REJECT for imperfect work",
+      "citation": "https://api.dealwork.ai/skill.md \u00a7practices ('If the work is good but imperfect, prefer REQUEST_REVISION over REJECT')"
+     }
+    ]
+   },
+   "dispute_path": {
+    "trigger": "buyer REJECT from in_review",
+    "resolution": "platform-mediated, two terminal outcomes only: RESOLVE_WORKER (completed -> paid) or RESOLVE_BUYER (refunded)",
+    "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> REJECT -> disputed -> RESOLVE_WORKER -> completed -> paid; -> RESOLVE_BUYER -> refunded')"
+   },
+   "timers": [
+    {
+     "timer": "biddingDeadline required on bid-mode job posts",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Bids"
+    },
+    {
+     "timer": "Bid rate limits: 10 bid creations/hour; 3 attempts per job per 24h (429 RATE_LIMITED / TOO_MANY_BID_ATTEMPTS + Retry-After)",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7What's new (v1.6.5)"
+    },
+    {
+     "timer": "24-hour buyer auto-approve after worker submission",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('24-hour auto-approve if buyer doesn't respond')"
+    },
+    {
+     "timer": "Worker liveness bands: active (<24h) / idle (24-72h) / dead (>72h)",
+     "citation": "https://api.dealwork.ai/skill.md \u00a7workerActivityStatus"
+    }
+   ],
+   "unknowns": [
+    "Whether escrow is forfeited, split, or fully refunded between RESOLVE_WORKER and RESOLVE_BUYER when the delivered work is partial - the public skill states only the two terminal states.",
+    "The platform's SLA for issuing a dispute resolution (no resolution deadline is published).",
+    "Whether revisionCount resets after a dispute is resolved with RESOLVE_WORKER."
+   ]
+  },
+  {
+   "name": "Taskmarket",
+   "sources": [
+    "https://taskmarket.dev/skill.md (taskmarket-operator, version 2026-08-25, fetched 2026-10-13)",
+    "https://docs.taskmarket.dev/reference/evaluators.md (Evaluators, Appeals, and Disputes)",
+    "https://docs.taskmarket.dev/reference/task-schema.md (reference/task-schema.md)"
+   ],
+   "lifecycle_states": [
+    {
+     "state": "open",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Mode entry or open-contest submission phase')"
+    },
+    {
+     "state": "claimed",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('A claim or auction worker is selected and may deliver')"
+    },
+    {
+     "state": "worker_selected",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('A pitch worker is selected and may deliver')"
+    },
+    {
+     "state": "pending_approval",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('A designated worker delivered, or evaluator timeout returned control to the requester')"
+    },
+    {
+     "state": "review",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Assigned evaluator may issue a verdict')"
+    },
+    {
+     "state": "appealing",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Verdict exists and appeal or finalization is pending')"
+    },
+    {
+     "state": "disputed",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Assigned resolver must resolve')"
+    },
+    {
+     "state": "completed",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Payout completion is indexed')"
+    },
+    {
+     "state": "expired",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Expired escrow was resolved')"
+    },
+    {
+     "state": "cancelled",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('Open task was cancelled')"
+    },
+    {
+     "state": "(no 'accepted' state exists in the public enum)",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('There is no public API accepted status')"
+    }
+   ],
+   "sequence_diagram_mermaid": "stateDiagram-v2\n    [*] --> open\n    open --> claimed: claim mode (worker assigned)\n    open --> worker_selected: pitch mode\n    claimed --> pending_approval: artifact delivered (non-evaluated modes)\n    worker_selected --> pending_approval: artifact delivered\n    pending_approval --> completed: requester approves\n    claimed --> review: evaluated designated-worker flow\n    review --> completed: evaluator approves / awards\n    review --> appealing: evaluator verdict issued\n    review --> pending_approval: evaluator-timeout (requester reclaims decision)\n    appealing --> disputed: worker pays 0.001 USDC to appeal\n    disputed --> completed: assigned resolver awards\n    open --> cancelled: requester cancels (blocked while active submissions exist)\n    open --> expired: expiryTime passed and escrow resolved",
+   "payment_timing": {
+    "custody": "on-chain escrow on the task contract; the requester funds at creation, awards decide who is paid",
+    "when_money_moves": "on evaluator/requester approval awards are paid; an approve verdict with no award refunds remaining escrow to the requester",
+    "events": [
+     {
+      "claim": "Awards determine who is paid; an approve verdict without an award refunds the remaining escrow to the requester",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review ('Awards determine who is paid. An approve verdict without an award refunds the remaining escrow to the requester')"
+     },
+     {
+      "claim": "Partial/multi-worker outcomes use one or more awards",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review ('For partial or multi-worker outcomes, add one or more awards')"
+     },
+     {
+      "claim": "Assigning an evaluator after the task is live costs 0.001 USDC",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Assignment ('An evaluator decided after the task is already live is assigned with its own command, which costs 0.001 USDC')"
+     },
+     {
+      "claim": "Evaluation costs 0.001 USDC",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review ('Evaluation costs 0.001 USDC')"
+     },
+     {
+      "claim": "Cancellation and expired refund are blocked until active submissions are accepted or explicitly rejected",
+      "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Mode Transitions ('Cancellation and expired refund are blocked until those submissions are accepted or explicitly rejected')"
+     }
+    ]
+   },
+   "review_model": {
+    "who_accepts": "the requester, or an assigned evaluator when status=review (only eligibleAddress may issue the verdict); a dispute resolver decides when disputed",
+    "revision": "rejection is recorded per submission (rejectedAt); no revision state, the worker resubmits",
+    "auto_accept": "none published; status never transitions automatically when expiryTime passes",
+    "citations": [
+     {
+      "claim": "When status=review only eligibleAddress on the evaluate action may issue the verdict",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review"
+     },
+     {
+      "claim": "evaluator and dispute-resolver must each be distinct from the requester (no self-assignment)",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Assignment"
+     },
+     {
+      "claim": "There is no way to replace or remove an evaluator once assigned",
+      "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Assignment"
+     },
+     {
+      "claim": "status never transitions automatically when expiryTime passes",
+      "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses"
+     },
+     {
+      "claim": "rejectedAt: null identifies an active submission",
+      "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7Submission Rows"
+     }
+    ]
+   },
+   "dispute_path": {
+    "trigger": "worker appeal (0.001 USDC) from appealing, or an assigned resolver taking a disputed task",
+    "resolution": "the assigned dispute-resolver decides; appeal is an irreversible escalation requiring explicit operator approval",
+    "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Appeal ('After an evaluator verdict, the task enters appealing... an irreversible dispute escalation') + https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('disputed: Assigned resolver must resolve')"
+   },
+   "timers": [
+    {
+     "timer": "submissionWindowOpen: bounty/benchmark deliverable submission open before expiry",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7submissionWindowOpen"
+    },
+    {
+     "timer": "evaluationWindow: set by --evaluation-window <hours> at assignment",
+     "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Assignment"
+    },
+    {
+     "timer": "appealWindow: set by --appeal-window <hours>; protocol minimum five minutes by default, on-chain floor readable via minAppealWindowSecs()",
+     "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Assignment"
+    },
+    {
+     "timer": "appealDeadline: worker may pay 0.001 USDC to appeal before it",
+     "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Appeal"
+    },
+    {
+     "timer": "evaluatorDeadline: after it the requester may pay 0.001 USDC to reclaim the decision (evaluator-timeout)",
+     "citation": "https://docs.taskmarket.dev/reference/evaluators.md \u00a7Evaluator Timeout"
+    },
+    {
+     "timer": "phase bucket awaiting_settlement: expiryTime has passed for open/claimed/worker_selected",
+     "citation": "https://docs.taskmarket.dev/reference/task-schema.md \u00a7phase"
+    }
+   ],
+   "unknowns": [
+    "Whether a resolved dispute carries a fixed fee beyond the resolver's own assignment terms - evaluators.md names the 0.001 USDC evaluate/appeal costs but gives no resolver compensation.",
+    "The exact appeal response deadline once the worker has paid the 0.001 USDC (the window value is requester-set, not a protocol constant).",
+    "The 'known escrow defect' referenced for refund_expired is not described in the public schema."
+   ]
+  },
+  {
+   "name": "BotHire",
+   "sources": [
+    "https://www.bothire.io/skill.md (bothire, version 0.1.0, homepage https://www.bothire.io, fetched 2026-10-13)"
+   ],
+   "lifecycle_states": [
+    {
+     "state": "post_open",
+     "citation": "https://www.bothire.io/skill.md \u00a7post"
+    },
+    {
+     "state": "hire_created",
+     "citation": "https://www.bothire.io/skill.md \u00a7hire"
+    },
+    {
+     "state": "paid (direct or escrow_deposit)",
+     "citation": "https://www.bothire.io/skill.md \u00a7Protection ('<$1 = direct (instant, irreversible, no refund); >=$1 = escrow (24h auto-refund + on-chain dispute)')"
+    },
+    {
+     "state": "input_sent",
+     "citation": "https://www.bothire.io/skill.md \u00a7request"
+    },
+    {
+     "state": "result_ready",
+     "citation": "https://www.bothire.io/skill.md \u00a7complete"
+    },
+    {
+     "state": "delivered",
+     "citation": "https://www.bothire.io/skill.md \u00a7deliver"
+    },
+    {
+     "state": "settled",
+     "citation": "https://www.bothire.io/skill.md \u00a7settle ('provider /settle pays the actual (<= max) + refunds the rest in one tx')"
+    },
+    {
+     "state": "refunded (escrow deadline)",
+     "citation": "https://www.bothire.io/skill.md \u00a7Protection ('unused auto-refunded at the escrow deadline (~24h fixed)')"
+    },
+    {
+     "state": "disputed",
+     "citation": "https://www.bothire.io/skill.md \u00a7arbiter"
+    },
+    {
+     "state": "cancelled (hirer cancel/refund)",
+     "citation": "https://www.bothire.io/skill.md \u00a7request/complete/cancel ('If you don't respond, the hirer may cancel + refund')"
+    }
+   ],
+   "sequence_diagram_mermaid": "stateDiagram-v2\n    [*] --> post_open\n    post_open --> hire_created\n    hire_created --> direct_paid: price < $1 (instant, irreversible)\n    hire_created --> escrow_deposit: price >= $1 (on-chain escrow, auto_refund_at armed)\n    direct_paid --> input_sent\n    escrow_deposit --> input_sent\n    input_sent --> result_ready\n    result_ready --> delivered\n    delivered --> settled: provider /settle before auto_refund_at\n    escrow_deposit --> disputed: hirer files on-chain /dispute before the deadline\n    disputed --> settled: arbiter releases to provider\n    disputed --> refunded: arbiter refunds hirer\n    escrow_deposit --> refunded: no settle, no arbiter -> 30-day safety-window auto-refund\n    direct_paid --> cancelled: hirer cancels (no refund on direct)",
+   "payment_timing": {
+    "custody": "ownerless on-chain escrow for >=$1 fixed hires and for metered hires (max deposit); direct transfers (<$1) are non-custodial and irreversible",
+    "when_money_moves": "escrow deposit on hire; provider /settle pays actual and refunds the remainder in one tx; no settle and no arbiter action -> auto-refund after the 30-day safety window",
+    "events": [
+     {
+      "claim": "Protection scales with price: <$1 direct (no refund), >=$1 escrow (24h auto-refund + on-chain dispute)",
+      "citation": "https://www.bothire.io/skill.md \u00a7Protection scales with price"
+     },
+     {
+      "claim": "Provider must /settle before auto_refund_at or the buyer is fully auto-refunded",
+      "citation": "https://www.bothire.io/skill.md \u00a7escrow ('Provider MUST /settle before auto_refund_at or the buyer is fully auto-refunded')"
+     },
+     {
+      "claim": "No refund and not arbitrable for direct (<$1) and metered quote-first",
+      "citation": "https://www.bothire.io/skill.md \u00a7What you can dispute / get refunded"
+     },
+     {
+      "claim": "Outcomes feed both trust scores",
+      "citation": "https://www.bothire.io/skill.md \u00a7arbiter"
+     }
+    ]
+   },
+   "review_model": {
+    "who_accepts": "the hirer controls request/complete/cancel (buyer protection); the provider delivers and settles",
+    "revision": "hirer can resend with a new message_id; provider-driven, no formal revision counter",
+    "auto_accept": "no silence-accept; instead silence cleans up - the escrow auto-refunds the hirer",
+    "citations": [
+     {
+      "claim": "request/complete/cancel are hirer-controlled by design (buyer protection)",
+      "citation": "https://www.bothire.io/skill.md \u00a7request/complete/cancel ('request/complete/cancel are hirer-controlled by design (buyer protection)')"
+     },
+     {
+      "claim": "hires above a cap await a wallet signature (api_key cannot self-approve)",
+      "citation": "https://www.bothire.io/skill.md \u00a7approval"
+     }
+    ]
+   },
+   "dispute_path": {
+    "trigger": "hirer files the on-chain /dispute BEFORE the auto-refund deadline; dispute arbitration is only wired for fixed escrow",
+    "resolution": "an on-chain arbiter rules: release to provider OR refund hirer - those are the only two outcomes; the arbiter cannot change the amount or touch a non-disputed escrow; if no arbiter acts the escrow auto-refunds the hirer after a 30-day safety window",
+    "citation": "https://www.bothire.io/skill.md \u00a7arbiter ('Arbiter rules on-chain: release to provider OR refund hirer - the only two outcomes... If no arbiter acts, the escrow auto-refunds the hirer after a 30-day safety window')"
+   },
+   "timers": [
+    {
+     "timer": "escrow auto-refund deadline: ~24h fixed (metered: the deposit deadline)",
+     "citation": "https://www.bothire.io/skill.md \u00a7Protection / \u00a7escrow (auto_refund_at)"
+    },
+    {
+     "timer": "30-day safety window: un-actioned disputed escrow auto-refunds the hirer",
+     "citation": "https://www.bothire.io/skill.md \u00a7arbiter"
+    },
+    {
+     "timer": "Hire request/dispute must be filed before the auto-refund deadline",
+     "citation": "https://www.bothire.io/skill.md \u00a7arbiter step 2 ('...this BEFORE the auto-refund deadline')"
+    },
+    {
+     "timer": "Provider credentials expire in 30 days (refetch for current reputation)",
+     "citation": "https://www.bothire.io/skill.md \u00a7credentials"
+    }
+   ],
+   "unknowns": [
+    "Who operates the on-chain arbiter (a multisig, a service, or the platform key) is not named in the public skill.",
+    "The exact dispute-filing window length relative to the ~24h auto-refund deadline is described qualitatively ('before the auto-refund deadline').",
+    "No published SLA for how fast a provider must /deliver before the escrow auto-refunds."
+   ]
+  },
+  {
+   "name": "OpenTask",
+   "sources": [
+    "https://opentask.ai/skill.md (opentask-agent, fetched 2026-10-13)",
+    "https://opentask.ai/agent-docs/delivery"
+   ],
+   "lifecycle_states": [
+    {
+     "state": "listing draft -> verified -> published (or paused / moderationStatus=review_required)",
+     "citation": "https://opentask.ai/skill.md \u00a7publish gate"
+    },
+    {
+     "state": "open (bid / entry)",
+     "citation": "https://opentask.ai/skill.md \u00a7bids and entries"
+    },
+    {
+     "state": "offer accepted",
+     "citation": "https://opentask.ai/skill.md \u00a7bids ('a rejected/withdrawn/expired offer frees a new bid')"
+    },
+    {
+     "state": "contract",
+     "citation": "https://opentask.ai/skill.md \u00a7contracts"
+    },
+    {
+     "state": "milestone proposed -> active -> submitted -> accepted / rejected",
+     "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+    },
+    {
+     "state": "payment_pending (award may mint or replace a payment request before paymentDueAt)",
+     "citation": "https://opentask.ai/skill.md \u00a7Payment options"
+    },
+    {
+     "state": "delivered (seller submission)",
+     "citation": "https://opentask.ai/skill.md \u00a7delivery approval"
+    },
+    {
+     "state": "completed (acceptance on verified payment)",
+     "citation": "https://opentask.ai/skill.md \u00a7Delivery approval ('Delivery approval and router-verified payment are separate authorities')"
+    },
+    {
+     "state": "revision",
+     "citation": "https://opentask.ai/skill.md \u00a7delivery"
+    },
+    {
+     "state": "disputed (openDisputeId set)",
+     "citation": "https://opentask.ai/skill.md \u00a7Reviews and disputes"
+    },
+    {
+     "state": "refund requested -> seller_approved / denied / cancelled",
+     "citation": "https://opentask.ai/skill.md \u00a7Refund requests"
+    },
+    {
+     "state": "cancelled",
+     "citation": "https://opentask.ai/skill.md \u00a7delivery"
+    }
+   ],
+   "sequence_diagram_mermaid": "stateDiagram-v2\n    [*] --> open\n    open --> contract: bid or offer accepted (Pitch award)\n    contract --> contract: milestones proposed -> active -> submitted -> accepted\n    contract --> payment_pending: accepted milestone returns payment.status=payment_due\n    payment_pending --> delivered: buyer mints/replaces a crypto payment request before paymentDueAt\n    delivered --> completed: acceptance on router-verified payment (settlementProofKind)\n    delivered --> disputed: open a dispute for admin review\n    disputed --> completed: admin review resolves\n    contract --> refunded: buyer refund-request approved by seller\n    contract --> cancelled: participant cancels",
+   "payment_timing": {
+    "custody": "non-custodial - OpenTask does not host funds or hold wallet keys; the router verifies payments on-chain",
+    "when_money_moves": "the buyer signs a crypto payment request; final acceptance requires exact router proof for the immutable seller amount, token and fee; milestones roll up into settlementProofKind=milestone_rollup",
+    "events": [
+     {
+      "claim": "Delivery approval and router-verified payment are separate authorities; never infer settlement from a package, review, status label or tx hash",
+      "citation": "https://opentask.ai/skill.md \u00a7Delivery approval and router-verified payment are separate authorities"
+     },
+     {
+      "claim": "An award can mint or replace a request only while payment_pending and before paymentDueAt",
+      "citation": "https://opentask.ai/skill.md \u00a7Payment options"
+     },
+     {
+      "claim": "Accepted unpaid milestones return payment.status: payment_due and payment.support.enabled: true",
+      "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+     },
+     {
+      "claim": "Once every non-cancelled milestone is accepted with exact proof, OpenTask persists settlementProofKind=milestone_rollup and final acceptance uses that aggregate proof",
+      "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+     },
+     {
+      "claim": "Refund requests are participant-only agreement records; platform fees are marked platform_fee_not_refundable; OpenTask has no refund rail and cannot reverse direct router settlement",
+      "citation": "https://opentask.ai/skill.md \u00a7Refund requests"
+     }
+    ]
+   },
+   "review_model": {
+    "who_accepts": "the buyer/requester accepts delivered work; acceptance is bound to verified payment rather than a bare approval",
+    "revision": "milestones can be accepted or rejected individually (POST .../milestones/:id/decision); rejected milestones can be resubmitted",
+    "auto_accept": "awards auto-accept on verified payment (acceptance follows the router proof, not a manual step)",
+    "citations": [
+     {
+      "claim": "Buyers accept or reject submitted milestones with POST /api/agent/contracts/:contractId/milestones/:milestoneId/decision",
+      "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+     },
+     {
+      "claim": "OpenTask persists settlementProofKind: milestone_rollup once all non-cancelled milestones have exact proof",
+      "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+     },
+     {
+      "claim": "One milestone's router proof is scoped to that unit and cannot unlock another milestone or the contract early",
+      "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+     }
+    ]
+   },
+   "dispute_path": {
+    "trigger": "open a dispute when settled payment and delivery quality require admin review",
+    "resolution": "admin review via the disputes endpoint; only one dispute may remain open per contract and the write is idempotency-keyed, so a retry cannot open a second dispute",
+    "citation": "https://opentask.ai/skill.md \u00a7Reviews and disputes ('POST /api/agent/contracts/:contractId/disputes with a stable Idempotency-Key'; 'Only one dispute may remain open for a contract')"
+   },
+   "timers": [
+    {
+     "timer": "paymentDueAt: deadline for minting or replacing an award's payment request while payment_pending",
+     "citation": "https://opentask.ai/skill.md \u00a7Payment options"
+    },
+    {
+     "timer": "Milestone schedule windows are per-milestone (recommendedAction drives the next step)",
+     "citation": "https://opentask.ai/skill.md \u00a7Milestones"
+    },
+    {
+     "timer": "Managed spend permissions enforce one shared daily and lifetime budget; pending authorizations retain capacity across midnight",
+     "citation": "https://opentask.ai/skill.md \u00a7Payment options"
+    },
+    {
+     "timer": "Credentials/listing lifecycle: publish gate returns admin_review_required until admin review restores a high-risk listing",
+     "citation": "https://opentask.ai/skill.md \u00a7publish gate"
+    }
+   ],
+   "unknowns": [
+    "The numeric value of paymentDueAt (whether it is set from the request, the milestone, or a platform default) is not given in the public skill.",
+    "The admin review SLA for a dispute or a review_required listing is not published.",
+    "Whether a refund-request 'cancel' action by the requester frees the reserved amount immediately or after expiry is not stated (only that the amount stays reserved while seller_approved)."
+   ]
+  },
+  {
+   "name": "Clawlancer",
+   "sources": [
+    "https://clawlancer.ai/api-docs.md (Clawlancer API Documentation, base https://clawlancer.ai/api, fetched 2026-10-13)"
+   ],
+   "lifecycle_states": [
+    {
+     "state": "BOUNTY listing open (poster funds escrow, anyone may claim)",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Transaction Types ('BOUNTY: Request for work. Poster funds escrow, anyone can claim and deliver')"
+    },
+    {
+     "state": "claimed",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Bounty claim ('Bounty claimed successfully. Deliver your work to complete the transaction')"
+    },
+    {
+     "state": "PENDING",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7List Transactions (state filter enum: PENDING, FUNDED, DELIVERED, RELEASED, REFUNDED, DISPUTED)"
+    },
+    {
+     "state": "FUNDED",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Purchase FIXED listing ('state: FUNDED - Escrow created. Waiting for seller to deliver')"
+    },
+    {
+     "state": "DELIVERED",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Deliver Work ('Delivery recorded. Waiting for buyer to release escrow')"
+    },
+    {
+     "state": "RELEASED",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Release Escrow (buyer POST /api/transactions/{id}/release)"
+    },
+    {
+     "state": "REFUNDED",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Request Refund (buyer POST /api/transactions/{id}/refund, before delivery)"
+    },
+    {
+     "state": "DISPUTED",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7List Transactions (state enum includes DISPUTED)"
+    }
+   ],
+   "sequence_diagram_mermaid": "stateDiagram-v2\n    [*] --> PENDING\n    PENDING --> FUNDED: buyer creates escrow on-chain (FIXED purchase, or claim -> FUNDED for BOUNTY)\n    FUNDED --> DELIVERED: seller POST /api/transactions/{id}/deliver\n    DELIVERED --> RELEASED: buyer POST /api/transactions/{id}/release\n    FUNDED --> REFUNDED: buyer POST /api/transactions/{id}/refund (before delivery)\n    DELIVERED --> DISPUTED: dispute window exceeded / contested\n    DISPUTED --> RELEASED: resolution to seller\n    DISPUTED --> REFUNDED: resolution to buyer",
+   "payment_timing": {
+    "custody": "on-chain escrow named by the API (escrow_id / escrow_id_bytes32); the buyer deposits, the seller is paid from escrow",
+    "when_money_moves": "buyer releases manually via POST /api/transactions/{id}/release; external agents must release on-chain first and then submit the tx_hash; the platform takes a fee on release",
+    "events": [
+     {
+      "claim": "Buyer releases payment to seller via POST /api/transactions/{id}/release",
+      "citation": "https://clawlancer.ai/api-docs.md \u00a7Release Escrow"
+     },
+     {
+      "claim": "External agents must release on-chain first, then provide tx_hash",
+      "citation": "https://clawlancer.ai/api-docs.md \u00a7Release Escrow ('External agents must release on-chain first, then provide the tx_hash')"
+     },
+     {
+      "claim": "Release response reports seller_received_wei and fee_wei (the platform fee is taken at release)",
+      "citation": "https://clawlancer.ai/api-docs.md \u00a7Release Escrow (response body: seller_received_wei, fee_wei)"
+     },
+     {
+      "claim": "A refund can only be requested before delivery",
+      "citation": "https://clawlancer.ai/api-docs.md \u00a7Request Refund ('Buyer requests a refund (before delivery)')"
+     }
+    ]
+   },
+   "review_model": {
+    "who_accepts": "the buyer; there is no separate accept/approve event - the manual release IS the acceptance",
+    "revision": "none published; a delivered escrow sits until the buyer releases, refunds, or it disputes",
+    "auto_accept": "a 24h dispute window after delivery is reported (dispute_window_hours: 24) but the API docs describe no auto-release; the earlier skill flagged a 1h vs 24h discrepancy",
+    "citations": [
+     {
+      "claim": "Delivery response returns dispute_window_hours: 24",
+      "citation": "https://clawlancer.ai/api-docs.md \u00a7Deliver Work (response body includes dispute_window_hours)"
+     },
+     {
+      "claim": "Delivery message is 'Waiting for buyer to release escrow' - release is manual",
+      "citation": "https://clawlancer.ai/api-docs.md \u00a7Deliver Work"
+     }
+    ]
+   },
+   "dispute_path": {
+    "trigger": "a DISPUTED transaction state exists in the public state enum",
+    "resolution": "not described in the public API docs - the docs expose the state but no dispute endpoint or resolution rule",
+    "citation": "https://clawlancer.ai/api-docs.md \u00a7List Transactions (state filter enum includes DISPUTED); no dispute endpoint documented in the public api-docs.md"
+   },
+   "timers": [
+    {
+     "timer": "dispute_window_hours: 24 returned on delivery",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Deliver Work"
+    },
+    {
+     "timer": "Create Direct Transaction deadline_hours (default 48 in the example body)",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7Create Direct Transaction"
+    },
+    {
+     "timer": "Heartbeat routine documented at a 30-minute cadence ('how active agents earn')",
+     "citation": "https://clawlancer.ai/api-docs.md \u00a7List Transactions / heartbeat note"
+    }
+   ],
+   "unknowns": [
+    "Whether the claim -> FUNDED ordering is claim-first or fund-first is not stated: the BOUNTY section says the poster funds escrow and anyone can claim, while the claim response says 'Bounty claimed successfully. Deliver your work to complete the transaction'. Listed as unknown rather than inferred.",
+    "There is no dispute resolution endpoint or arbiter named in the public API docs, only a DISPUTED state.",
+    "The exact auto-release timer is unreconciled (24h dispute window vs a 1h figure quoted in an earlier skill revision).",
+    "Whether the escrow contract address is published/verified is not stated in the public api-docs.md."
+   ]
+  }
+ ],
+ "comparison_matrix": {
+  "dimensions": [
+   "custody_model",
+   "when_money_moves",
+   "review_model",
+   "auto_accept_timer",
+   "dispute_path",
+   "entry_mechanism",
+   "claim_timer"
+  ],
+  "columns": {
+   "Dealwork": {
+    "custody_model": "platform escrow; funds locked from the buyer's wallet at bid acceptance, not at posting Citation: https://api.dealwork.ai/skill.md (v1.6.5, fetched 2026-10-13; 'Contract State Machine' section)",
+    "when_money_moves": "locked at escrow_locked; released only by an explicit RELEASE_ESCROW event, which APPROVE auto-fires once the contract reaches completed | Cites: https://api.dealwork.ai/skill.md \u00a7Buyer Workflow ('Posting a bid-mode job does not lock funds immediately - escrow locks when you accept a bid'); https://api.dealwork.ai/skill.md \u00a7Buyer events ('Buyer events: APPROVE, REQUEST_REVISION (requires feedback), REJECT (requires reason), RELEASE_ESCROW (when state=completed)')",
+    "review_model": "the buyer; approval is an explicit APPROVE event; 24-hour auto-approve if the buyer does not respond | Cites: https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> REQUEST_REVISION -> in_progress (revisionCount++, max 10)'); https://api.dealwork.ai/skill.md \u00a7Buyer events ('REQUEST_REVISION (requires feedback), REJECT (requires reason)')",
+    "auto_accept_timer": "Bid rate limits: 10 bid creations/hour; 3 attempts per job per 24h (429 RATE_LIMITED / TOO_MANY_BID_ATTEMPTS + Retry-After); 24-hour buyer auto-approve after worker submission; Worker liveness bands: active (<24h) / idle (24-72h) / dead (>72h)",
+    "dispute_path": "buyer REJECT from in_review -> platform-mediated, two terminal outcomes only: RESOLVE_WORKER (completed -> paid) or RESOLVE_BUYER (refunded) | Cite: https://api.dealwork.ai/skill.md \u00a7Contract State Machine ('in_review -> REJECT -> disputed -> RESOLVE_WORKER -> completed -> paid; -> RESOLVE_BUYER -> refunded')",
+    "entry_mechanism": "posted (see lifecycle_states for the full ordered set)",
+    "claim_timer": "biddingDeadline required on bid-mode job posts; Bid rate limits: 10 bid creations/hour; 3 attempts per job per 24h (429 RATE_LIMITED / TOO_MANY_BID_ATTEMPTS + Retry-After); 24-hour buyer auto-approve after worker submission; Worker liveness bands: active (<24h) / idle (24-72h) / dead (>72h)"
+   },
+   "Taskmarket": {
+    "custody_model": "on-chain escrow on the task contract; the requester funds at creation, awards decide who is paid Citation: https://taskmarket.dev/skill.md (taskmarket-operator, version 2026-08-25, fetched 2026-10-13)",
+    "when_money_moves": "on evaluator/requester approval awards are paid; an approve verdict with no award refunds remaining escrow to the requester | Cites: https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review ('Awards determine who is paid. An approve verdict without an award refunds the remaining escrow to the requester'); https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review ('For partial or multi-worker outcomes, add one or more awards')",
+    "review_model": "the requester, or an assigned evaluator when status=review (only eligibleAddress may issue the verdict); a dispute resolver decides when disputed; none published; status never transitions automatically when expiryTime passes | Cites: https://docs.taskmarket.dev/reference/evaluators.md \u00a7Review; https://docs.taskmarket.dev/reference/evaluators.md \u00a7Assignment",
+    "auto_accept_timer": "no auto-accept timer published",
+    "dispute_path": "worker appeal (0.001 USDC) from appealing, or an assigned resolver taking a disputed task -> the assigned dispute-resolver decides; appeal is an irreversible escalation requiring explicit operator approval | Cite: https://docs.taskmarket.dev/reference/evaluators.md \u00a7Appeal ('After an evaluator verdict, the task enters appealing... an irreversible dispute escalation') + https://docs.taskmarket.dev/reference/task-schema.md \u00a7Public Statuses ('disputed: Assigned resolver must resolve')",
+    "entry_mechanism": "open (see lifecycle_states for the full ordered set)",
+    "claim_timer": "submissionWindowOpen: bounty/benchmark deliverable submission open before expiry; evaluationWindow: set by --evaluation-window <hours> at assignment; appealWindow: set by --appeal-window <hours>; protocol minimum five minutes by default, on-chain floor readable via minAppealWindowSecs(); appealDeadline: worker may pay 0.001 USDC to appeal before it; evaluatorDeadline: after it the requester may pay 0.001 USDC to reclaim the decision (evaluator-timeout); phase bucket awaiting_settlement: expiryTime has passed for open/claimed/worker_selected"
+   },
+   "BotHire": {
+    "custody_model": "ownerless on-chain escrow for >=$1 fixed hires and for metered hires (max deposit); direct transfers (<$1) are non-custodial and irreversible Citation: https://www.bothire.io/skill.md (bothire, version 0.1.0, homepage https://www.bothire.io, fetched 2026-10-13)",
+    "when_money_moves": "escrow deposit on hire; provider /settle pays actual and refunds the remainder in one tx; no settle and no arbiter action -> auto-refund after the 30-day safety window | Cites: https://www.bothire.io/skill.md \u00a7Protection scales with price; https://www.bothire.io/skill.md \u00a7escrow ('Provider MUST /settle before auto_refund_at or the buyer is fully auto-refunded')",
+    "review_model": "the hirer controls request/complete/cancel (buyer protection); the provider delivers and settles; no silence-accept; instead silence cleans up - the escrow auto-refunds the hirer | Cites: https://www.bothire.io/skill.md \u00a7request/complete/cancel ('request/complete/cancel are hirer-controlled by design (buyer protection)'); https://www.bothire.io/skill.md \u00a7approval",
+    "auto_accept_timer": "escrow auto-refund deadline: ~24h fixed (metered: the deposit deadline); 30-day safety window: un-actioned disputed escrow auto-refunds the hirer; Hire request/dispute must be filed before the auto-refund deadline",
+    "dispute_path": "hirer files the on-chain /dispute BEFORE the auto-refund deadline; dispute arbitration is only wired for fixed escrow -> an on-chain arbiter rules: release to provider OR refund hirer - those are the only two outcomes; the arbiter cannot change the amount or touch a non-disputed escrow; if no arbiter acts the escrow auto-refunds the hirer after a 30-day safety window | Cite: https://www.bothire.io/skill.md \u00a7arbiter ('Arbiter rules on-chain: release to provider OR refund hirer - the only two outcomes... If no arbiter acts, the escrow auto-refunds the hirer after a 30-day safety window')",
+    "entry_mechanism": "post_open (see lifecycle_states for the full ordered set)",
+    "claim_timer": "escrow auto-refund deadline: ~24h fixed (metered: the deposit deadline); 30-day safety window: un-actioned disputed escrow auto-refunds the hirer; Hire request/dispute must be filed before the auto-refund deadline; Provider credentials expire in 30 days (refetch for current reputation)"
+   },
+   "OpenTask": {
+    "custody_model": "non-custodial - OpenTask does not host funds or hold wallet keys; the router verifies payments on-chain Citation: https://opentask.ai/skill.md (opentask-agent, fetched 2026-10-13)",
+    "when_money_moves": "the buyer signs a crypto payment request; final acceptance requires exact router proof for the immutable seller amount, token and fee; milestones roll up into settlementProofKind=milestone_rollup | Cites: https://opentask.ai/skill.md \u00a7Delivery approval and router-verified payment are separate authorities; https://opentask.ai/skill.md \u00a7Payment options",
+    "review_model": "the buyer/requester accepts delivered work; acceptance is bound to verified payment rather than a bare approval; awards auto-accept on verified payment (acceptance follows the router proof, not a manual step) | Cites: https://opentask.ai/skill.md \u00a7Milestones; https://opentask.ai/skill.md \u00a7Milestones",
+    "auto_accept_timer": "no auto-accept timer published",
+    "dispute_path": "open a dispute when settled payment and delivery quality require admin review -> admin review via the disputes endpoint; only one dispute may remain open per contract and the write is idempotency-keyed, so a retry cannot open a second dispute | Cite: https://opentask.ai/skill.md \u00a7Reviews and disputes ('POST /api/agent/contracts/:contractId/disputes with a stable Idempotency-Key'; 'Only one dispute may remain open for a contract')",
+    "entry_mechanism": "listing draft -> verified -> published (or paused / moderationStatus=review_required) (see lifecycle_states for the full ordered set)",
+    "claim_timer": "paymentDueAt: deadline for minting or replacing an award's payment request while payment_pending; Milestone schedule windows are per-milestone (recommendedAction drives the next step); Managed spend permissions enforce one shared daily and lifetime budget; pending authorizations retain capacity across midnight; Credentials/listing lifecycle: publish gate returns admin_review_required until admin review restores a high-risk listing"
+   },
+   "Clawlancer": {
+    "custody_model": "on-chain escrow named by the API (escrow_id / escrow_id_bytes32); the buyer deposits, the seller is paid from escrow Citation: https://clawlancer.ai/api-docs.md (Clawlancer API Documentation, base https://clawlancer.ai/api, fetched 2026-10-13)",
+    "when_money_moves": "buyer releases manually via POST /api/transactions/{id}/release; external agents must release on-chain first and then submit the tx_hash; the platform takes a fee on release | Cites: https://clawlancer.ai/api-docs.md \u00a7Release Escrow; https://clawlancer.ai/api-docs.md \u00a7Release Escrow ('External agents must release on-chain first, then provide the tx_hash')",
+    "review_model": "the buyer; there is no separate accept/approve event - the manual release IS the acceptance; a 24h dispute window after delivery is reported (dispute_window_hours: 24) but the API docs describe no auto-release; the earlier skill flagged a 1h vs 24h discrepancy | Cites: https://clawlancer.ai/api-docs.md \u00a7Deliver Work (response body includes dispute_window_hours); https://clawlancer.ai/api-docs.md \u00a7Deliver Work",
+    "auto_accept_timer": "dispute_window_hours: 24 returned on delivery",
+    "dispute_path": "a DISPUTED transaction state exists in the public state enum -> not described in the public API docs - the docs expose the state but no dispute endpoint or resolution rule | Cite: https://clawlancer.ai/api-docs.md \u00a7List Transactions (state filter enum includes DISPUTED); no dispute endpoint documented in the public api-docs.md",
+    "entry_mechanism": "BOUNTY listing open (poster funds escrow, anyone may claim) (see lifecycle_states for the full ordered set)",
+    "claim_timer": "dispute_window_hours: 24 returned on delivery; Create Direct Transaction deadline_hours (default 48 in the example body); Heartbeat routine documented at a 30-minute cadence ('how active agents earn')"
+   },
+   "BasedAgents": {
+    "custody_model": "platform escrow (house-signed release leg) when a bounty is funded; sign-at-accept bounties stay non-custodial (no deposit held, no signature on the buyer's behalf). Source: SPEC.md \u00a7Escrow.",
+    "when_money_moves": "Claim bonds (1 USDC, bounty tasks only) are signed at claim. A funded escrow deposit is held until the task reaches verified (release to the deliverer's live wallet) or cancelled (refund to escrow_deposit_payer). A sign-at-accept bounty never moves money automatically: acceptance emits task.payment_due and the creator signs. Source: SPEC.md \u00a7Release / refund, \u00a7Auto-Accept.",
+    "review_model": "The creator (or the poster via the manage endpoints) accepts, requests a revision, disputes, or cancels. Revision is capped (revision_count < 3). Acceptance is separate from payment release and never waits on it. Source: SPEC.md \u00a7state T4/T6, \u00a7Ratings.",
+    "auto_accept_timer": "7 days: every delivery arms auto_release_at = now + 7 days; the cron flips submitted -> verified with accepted_by='auto' when no dispute is open. A dispute clears the timer; a revision re-arms it on the next delivery. Source: SPEC.md \u00a7Auto-Accept (7-day timer).",
+    "dispute_path": "POST /dispute from submitted freezes the auto-accept timer and slashes the claim bond (bounty tasks, once per task). The task carries review_state='disputed' with the reason in review_note until the buyer accepts or cancels. Source: SPEC.md \u00a7manage endpoints, \u00a7Ratings (D11).",
+    "entry_mechanism": "open claim; creator cannot claim its own task; claim requires a wallet on the bounty's network when escrowed. Source: SPEC.md \u00a7state T2.",
+    "claim_timer": "12h for bounties under 1 USDC, 48h under 10 USDC, otherwise 7 days; free tasks 7 days (CLAIM_WINDOW_MICRO_MS / SMALL_MS / DEFAULT_MS, governance.ts:83-92). Claim expiry returns claimed -> open, clears the claimer and review counters, and never moves money. Source: SPEC.md \u00a7Auto-Accept/claim timer + skill.md \u00a7delivery window."
+   }
+  },
+  "dimensions_note": "BasedAgents is the sixth column, read from its public SPEC.md; claim_timer follows the governance.ts constants (12h < 1 USDC, 48h < 10 USDC, else 7d; free tasks 7d). No cell is truncated - each value is a complete sentence with its source."
+ },
+ "memo": "This memo reads the five public lifecycles above plus BasedAgents' own SPEC.md. Every claim is in the JSON with a URL and a section; what follows is interpretation, labelled as such.\n\n**Lesson 1 - the acceptance clock, not the escrow, is what protects the worker. (opinion.)** Across the five, the only mechanism that pays a silent buyer's worker is a timer that converts delivery into acceptance without the buyer: Dealwork auto-approves after 24 hours, BasedAgents auto-accepts after 7 days, and BotHire deletes the problem instead - an unsettled escrow refunds the hirer after a 30-day safety window, so silence protects the *payer*, not the worker. Taskmarket publishes no auto-accept at all (`status` never transitions on expiry alone), and Clawlancer's docs expose only a 24h `dispute_window_hours` with no auto-release. The design lesson: a platform that does not arm an acceptance timer is choosing to let a buyer hold a delivery hostage for free, and the worker has no lever.\n\n**Lesson 2 - every platform that moves money has exactly two terminal dispute outcomes, and that symmetry is the real product. (opinion.)** Dealwork resolves to RESOLVE_WORKER (paid) or RESOLVE_BUYER (refunded). BotHire's on-chain arbiter may only release to the provider or refund the hirer, and it cannot touch the amount or a non-disputed escrow. Taskmarket assigns a distinct resolver (never the requester) and prices the escalation at 0.001 USDC. Clawlancer is the exception that proves it: it publishes a DISPUTED state with no resolution rule, so a disputed escrow has no documented exit. Symmetry plus a priced appeal is what makes arbitration credible; an unpriced, undocumented dispute path is just a parking state.\n\n**Lesson 3 - every fee and bond in these systems is deliberately tiny, and the tiny numbers are load-bearing. (opinion.)** Taskmarket charges 0.001 USDC to evaluate, to appeal and to reclaim a timed-out evaluator. BasedAgents bonds bounty claims at 1 USDC and slashes at dispute time, once per task, on bounty tasks only. BotHire switches behaviour entirely at the 1 USDC line - below it, irreversible direct payment with no recourse; at or above it, escrow, auto-refund and arbitration. These numbers are small enough to be friction rather than a barrier, which is exactly their job: they make spam unprofitable without pricing honest agents out, and they give the platform a public, queryable signal (who bonded, who appealed) that a purely qualitative dispute system never produces.\n\n**What the evidence does not settle (opinion).** Three gaps run through all six: the split rule when a dispute resolves partially, the liveness of the arbiter or resolver (who acts, and by when), and the ordering of fund versus claim where the docs are ambiguous (Clawlancer's claim -> FUNDED is listed as unknown, not inferred). A buyer who wants to exploit these systems should read those three gaps first; a platform that wants to defend them should close them before it adds another fee."
+}
